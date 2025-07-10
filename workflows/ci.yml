@@ -1,0 +1,269 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+env:
+  BUILD_TYPE: Release
+  COVERAGE_THRESHOLD: 95
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-20.04]
+        compiler: [gcc, clang]
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc-11
+            cxx: g++-11
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang-12
+            cxx: clang++-12
+          - os: ubuntu-20.04
+            compiler: gcc
+            cc: gcc-9
+            cxx: g++-9
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/vcpkg
+          build/_deps
+        key: ${{ runner.os }}-${{ matrix.compiler }}-${{ hashFiles('**/CMakeLists.txt') }}
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libboost-all-dev \
+          libgtest-dev \
+          libgmock-dev \
+          lcov \
+          doxygen \
+          graphviz \
+          cppcheck \
+          clang-tidy \
+          valgrind
+
+    - name: Configure CMake
+      env:
+        CC: ${{ matrix.cc }}
+        CXX: ${{ matrix.cxx }}
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DBUILD_TESTS=ON \
+          -DBUILD_EXAMPLES=ON \
+          -DENABLE_COVERAGE=${{ matrix.compiler == 'gcc' && 'ON' || 'OFF' }}
+
+    - name: Build
+      run: cmake --build build --config ${{env.BUILD_TYPE}} -j$(nproc)
+
+    - name: Run Tests
+      working-directory: build
+      run: |
+        ctest -C ${{env.BUILD_TYPE}} --output-on-failure --verbose
+        
+    - name: Run Performance Tests
+      working-directory: build
+      run: |
+        ./tests/performance_tests --gtest_output=xml:performance_results.xml
+        
+    - name: Generate Coverage Report
+      if: matrix.compiler == 'gcc' && matrix.os == 'ubuntu-latest'
+      run: |
+        cd build
+        lcov --capture --directory . --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' '*/test/*' '*/external/*' --output-file coverage.info
+        lcov --list coverage.info
+        
+    - name: Check Coverage Threshold
+      if: matrix.compiler == 'gcc' && matrix.os == 'ubuntu-latest'
+      run: |
+        cd build
+        coverage=$(lcov --summary coverage.info | grep lines | awk '{print $2}' | sed 's/%//')
+        echo "Code coverage: $coverage%"
+        if (( $(echo "$coverage < $COVERAGE_THRESHOLD" | bc -l) )); then
+          echo "Coverage $coverage% is below threshold of $COVERAGE_THRESHOLD%"
+          exit 1
+        fi
+
+    - name: Upload Coverage to Codecov
+      if: matrix.compiler == 'gcc' && matrix.os == 'ubuntu-latest'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./build/coverage.info
+        fail_ci_if_error: true
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.compiler }}
+        path: |
+          build/Testing/
+          build/**/*_results.xml
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck clang-tidy-12 clang-format-12
+        
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all \
+                 --error-exitcode=1 \
+                 --inline-suppr \
+                 --suppress=missingIncludeSystem \
+                 --suppress=unmatchedSuppression \
+                 --suppress=unusedFunction \
+                 -I include \
+                 src/ examples/
+                 
+    - name: Run clang-tidy
+      run: |
+        find src include examples -name '*.cpp' -o -name '*.h' | \
+        xargs clang-tidy-12 -p build --warnings-as-errors='*'
+        
+    - name: Check formatting
+      run: |
+        find src include examples tests -name '*.cpp' -o -name '*.h' | \
+        xargs clang-format-12 -style=file -i
+        git diff --exit-code
+
+  memory-check:
+    name: Memory Safety Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y valgrind libboost-all-dev libgtest-dev
+        
+    - name: Build Debug
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+        cmake --build build -j$(nproc)
+        
+    - name: Run Valgrind
+      run: |
+        cd build
+        valgrind --leak-check=full \
+                 --show-leak-kinds=all \
+                 --track-origins=yes \
+                 --verbose \
+                 --error-exitcode=1 \
+                 ./tests/module_tests
+
+  documentation:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Doxygen
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+        
+    - name: Generate Docs
+      run: |
+        cmake -B build -DBUILD_DOCS=ON
+        cmake --build build --target docs
+        
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/docs/html
+
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-all-dev libgtest-dev libbenchmark-dev
+        
+    - name: Build Benchmarks
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON
+        cmake --build build -j$(nproc)
+        
+    - name: Run Benchmarks
+      run: |
+        cd build
+        ./benchmarks/dcs_benchmarks --benchmark_format=json > benchmark_results.json
+        
+    - name: Store Benchmark Results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'googlecpp'
+        output-file-path: build/benchmark_results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        alert-threshold: '150%'
+        comment-on-alert: true
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-and-test, static-analysis, memory-check]
+    if: github.event_name == 'release'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Release Package
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build -j$(nproc)
+        cd build
+        cpack -G TGZ
+        cpack -G DEB
+        
+    - name: Upload Release Assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./build/distributed-control-system-*.tar.gz
+        asset_name: distributed-control-system-${{ github.event.release.tag_name }}.tar.gz
+        asset_content_type: application/gzip
