@@ -275,7 +275,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 ```bash
 # Fork and clone the repository
-git clone https://github.com/yourusername/distributed-control-system.git
+git clone https://github.com/SoutrikMukherjee/distributed-control-system.git
 
 # Create a feature branch
 git checkout -b feature/amazing-feature
