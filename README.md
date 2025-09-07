@@ -303,9 +303,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-- **Project Lead**: Your Name - your.email@example.com
-- **Issues**: [GitHub Issues](https://github.com/yourusername/distributed-control-system/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/distributed-control-system/discussions)
+- **Project Lead**: Soutrik Mukherjee - soutrik.viratech@gmail.com
 
 ---
 
