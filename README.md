@@ -1,10 +1,10 @@
 # Distributed Control System Architecture
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/distributed-control-system)
-[![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](https://github.com/yourusername/distributed-control-system)
+[![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](https://github.com/SoutrikMukherjee/distributed-control-system)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
-[![Documentation](https://img.shields.io/badge/docs-Doxygen-orange.svg)](https://yourusername.github.io/distributed-control-system/)
+[![Documentation](https://img.shields.io/badge/docs-Doxygen-orange.svg)](https://SoutrikMukherjee.github.io/distributed-control-system/)
 
 A high-performance, modular control system framework designed for real-time industrial automation and robotics applications. This system supports plug-and-play sensor and actuator modules with sub-millisecond latency communication.
 
@@ -222,7 +222,7 @@ system.setMetricsCallback([](const dcs::Metrics& m) {
 
 ## 📚 API Documentation
 
-Full API documentation is available at [https://yourusername.github.io/distributed-control-system/](https://yourusername.github.io/distributed-control-system/)
+Full API documentation is available at [https://SoutrikMukherjee.github.io/distributed-control-system/](https://SoutrikMukherjee.github.io/distributed-control-system/)
 
 ### Key Classes
 - `dcs::Module` - Base class for all modules
