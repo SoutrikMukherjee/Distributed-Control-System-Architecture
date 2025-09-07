@@ -100,7 +100,7 @@ A high-performance, modular control system framework designed for real-time indu
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/distributed-control-system.git
+git clone https://github.com/SoutrikMukherjee/distributed-control-system.git
 cd distributed-control-system
 
 # Build the project
